@@ -4,20 +4,21 @@
 //Uncomment the line below to enable the serial port for debugging. Comment it out to disable the serial output. NOTE: MIDI will not output in debugging mode because the serial port interferes with it.
 //#define SERIAL_DEBUG (1)
 
-#define SENSOR_IN_PIN (0)
 #define SENSOR_VALUE_THRESHOLD (100) //This sensor is actually more of a binary "on/off" reading of 1023 or 0, but this threshold still allows the code below to work.
 #define LOOP_SLEEP_MS (100) // Milliseconds to sleep/delay at the end of each loop iteration.
 
-#define DEFAULT_PITCH (pitchC3)
 #define DEFAULT_VELOCITY (100)
 
+#define NUM_SENSORS (2)
+const byte sensor_pins[NUM_SENSORS] = {0, 1};
+const byte pitches[NUM_SENSORS] = {pitchC3, pitchC5}; //Used in case the sensors read different values for the same light level
+
 int velocity = DEFAULT_VELOCITY;
-byte pitch = DEFAULT_PITCH;
 
 byte channel = 0; //MIDI channel to output on. I'm not sure what happens if you change this.
 
-int last_value = 0;
-int curr_value = 0;
+int last_value[NUM_SENSORS] = {0, 0};
+int curr_value[NUM_SENSORS] = {0, 0};
 
 void setup() {
 #ifdef SERIAL_DEBUG
@@ -29,19 +30,20 @@ void setup() {
 #endif
 }
 
-void read_value() {
-  curr_value = analogRead(SENSOR_IN_PIN);
-
+void read_values() {
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    curr_value[i] = analogRead(sensor_pins[i]);
 #ifdef SERIAL_DEBUG
-  Serial.print("Sensor read: "); Serial.println(curr_value);
+    Serial.print("Pin "); Serial.print(sensor_pins[i]); Serial.print(" sensor read: "); Serial.println(curr_value[i]);
 #endif
+  }
 }
 
-bool state_changed() {
-  return (curr_value != last_value);
+bool state_changed(int sensor_num) {
+  return (curr_value[sensor_num] != last_value[sensor_num]);
 }
 
-void play_midi_note() {
+void play_midi_note(byte pitch) {
 #ifndef SERIAL_DEBUG //Prevents this following from being executed if in serial debug mode
   midiEventPacket_t noteOn = {0x09, (byte)(0x90 | channel), pitch, (byte)velocity};
   MidiUSB.sendMIDI(noteOn);
@@ -59,11 +61,13 @@ void play_midi_note() {
 }
 
 void loop() {
-  read_value();
-  if (state_changed()) {
-    play_midi_note();
+  read_values();
+  for (int i = 0; i < NUM_SENSORS; i++) {
+    if (state_changed(i)) {
+      play_midi_note(pitches[i]);
+    }
+    last_value[i] = curr_value[i];
   }
-  last_value = curr_value;
   delay(LOOP_SLEEP_MS);
 }
 
