@@ -4,14 +4,16 @@
 //Uncomment the line below to enable the serial port for debugging. Comment it out to disable the serial output. NOTE: MIDI will not output in debugging mode because the serial port interferes with it.
 //#define SERIAL_DEBUG (1)
 
-#define SENSOR_VALUE_THRESHOLD (100) //This sensor is actually more of a binary "on/off" reading of 1023 or 0, but this threshold still allows the code below to work.
+//Comment this out if you want the MIDI note offs to be sent. Uncomment it if you do NOT want note offs to be sent.
+#define NO_NOTE_OFFS (1)
+
 #define LOOP_SLEEP_MS (100) // Milliseconds to sleep/delay at the end of each loop iteration.
 
 #define DEFAULT_VELOCITY (100)
 
 #define NUM_SENSORS (2)
 const byte sensor_pins[NUM_SENSORS] = {0, 1};
-const byte pitches[NUM_SENSORS] = {pitchC3, pitchC5}; //Used in case the sensors read different values for the same light level
+const byte pitches[NUM_SENSORS][2] = {{pitchA3, pitchD3}, {pitchA5, pitchD5}}; //Note to be played for each sensor/direction combo. Inner array is hard-coded to 2 for rising vs falling edge
 
 int velocity = DEFAULT_VELOCITY;
 
@@ -49,11 +51,13 @@ void play_midi_note(byte pitch) {
   MidiUSB.sendMIDI(noteOn);
   MidiUSB.flush();
 
+#ifndef NO_NOTE_OFFS //Prevents this subsection from running if NO_NOTE_OFFS is defined
   delay(50);
 
   midiEventPacket_t noteOff = {0x08, (byte)(0x80 | channel), pitch, (byte)velocity};
   MidiUSB.sendMIDI(noteOff);
   MidiUSB.flush();
+#endif
 
 #else
   Serial.print("MIDI packet velocity: "); Serial.print((byte)velocity); Serial.print(" , pitch: "); Serial.println((byte)pitch);
@@ -64,7 +68,11 @@ void loop() {
   read_values();
   for (int i = 0; i < NUM_SENSORS; i++) {
     if (state_changed(i)) {
-      play_midi_note(pitches[i]);
+      int dir = 0;
+      if ((curr_value[i] - last_value[i]) < 0)
+        dir = 1;
+
+      play_midi_note(pitches[i][dir]);
     }
     last_value[i] = curr_value[i];
   }
